@@ -33,7 +33,7 @@ def send_to_all(text, parse_mode=None):
         active_chats.difference_update(broken_chats)
         logging.info(f"Удалены заблокированные чаты: {broken_chats}")
 
-#Обработчик команды /start
+#Обработчик команды  /start
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
