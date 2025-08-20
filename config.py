@@ -6,7 +6,7 @@ TOKEN = '8427333691:AAF6tIBprUk3y48o86hYsWdcp8p-5LiQbPM'
 
 #Настройки времени
 TIMEZONES = {"MSK": 1, "CHL": 3}
-OFFSET = datetime.timedelta(hours=TIMEZONES["MSK"])
+OFFSET = datetime.timedelta(0)
 TIMEZONE = datetime.timezone(OFFSET)
 
 active_chats = set()
