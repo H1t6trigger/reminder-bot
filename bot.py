@@ -1,6 +1,7 @@
 import logging
 import telebot
 from config import TOKEN, active_chats
+from scheduler import setup_scheduler
 
 #Настройка бота
 bot = telebot.TeleBot(TOKEN)
@@ -28,11 +29,6 @@ def send_to_all(text, parse_mode=None):
         except Exception as e:
             logging.critical(f"Неизвестная ошибка: {str(e)}")
 
-#Удаляем недоступные чаты
-    if broken_chats:
-        active_chats.difference_update(broken_chats)
-        logging.info(f"Удалены заблокированные чаты: {broken_chats}")
-
 #Обработчик команды  /start
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -43,7 +39,6 @@ def start(message):
         logging.error(f"Ошибка в команде /start: {str(e)}")
 
 #Импорт и настройка планировщика
-from scheduler import setup_scheduler
 setup_scheduler(send_to_all)
 
 bot.infinity_polling()
