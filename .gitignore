@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+
+# Логи и БД
+*.log
+*.sqlite
+
+# Конфиги
+#config.py
+.env
+
+# Системные
+.DS_Store
+Thumbs.db
