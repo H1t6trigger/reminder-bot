@@ -3,46 +3,33 @@ import time
 from threading import Thread
 import schedule
 
-JOB_TIME = "09:30"
-DINNER_TIME = "11:55"
-WATER_TIME = "15:55"
-
 #Запуск планировщика
-def run_scheduler(send_func): 
+def run_scheduler(): 
     while True:
         try:
             schedule.run_pending()
             time.sleep(1)
         except Exception as e:
             logging.error(f"Ошибка в шедулере: {str(e)}")
+            time.sleep(5)
 
+#Настройка и запуск планировщика в отдельном потоке
 def setup_scheduler(send_func): 
-    """
-    Установка уведомлений для планировщика
-    
-        send_func: Функция отправки
-    """
     try:
-        schedule.every().day.at(JOB_TIME).do(
-            send_func,
-            "Кто опоздал на работу — тот <s>пыська</s> плохой человек!",
-            parse_mode="HTML"
+        scheduler_thread = Thread(
+            target=run_scheduler,
+            daemon=True,
+            name="SchedulerThread"
         )
-        schedule.every().day.at(DINNER_TIME).do(
-            send_func,
-            "Пора идти на обед!"
-        )
-        schedule.every().day.at(WATER_TIME).do(
-            send_func,
-            "Пора идти за водой!"
-        )
+        scheduler_thread.start()
+        
     except Exception as e:
-        logging.error(f"Ошибка при настройке расписания: {str(e)}")
+        logging.error(f"Ошибка при запуске потока шедулера: {str(e)}")
 
-    #Запуска планировщика в отдельном потоке
-    scheduler_thread = Thread( 
-        target=run_scheduler,
-        args=(send_func,),
-        daemon=True
-    )
-    scheduler_thread.start()
+#Удаление задания из планировщика по времени
+def remove_scheduled_job(delete_time):
+    for job in schedule.get_jobs():
+            if job.next_run:
+                job_time = job.next_run.strftime("%H:%M")
+                if job_time == delete_time:
+                    schedule.cancel_job(job)

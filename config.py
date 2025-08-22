@@ -5,11 +5,9 @@ import sys
 TOKEN = '8427333691:AAF6tIBprUk3y48o86hYsWdcp8p-5LiQbPM'
 
 #Настройки времени
-TIMEZONES = {"MSK": 1, "CHL": 3}
-OFFSET = datetime.timedelta(0)
+TIMEZONES = {"UTC": 0, "MSK": 1, "CHL": 3}
+OFFSET = datetime.timedelta(TIMEZONES['UTC'])
 TIMEZONE = datetime.timezone(OFFSET)
-
-active_chats = set()
 
 #Настройки логирования
 logging.basicConfig(
