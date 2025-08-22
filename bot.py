@@ -20,8 +20,6 @@ schedules_dict = {
 
 #Отправка всем активным чатам с обработкой ошибок
 def send_to_all(text, parse_mode=None):
-    broken_chats = set()
-
     for chat_id in active_chats:
         try:
             bot.send_message(chat_id, text, parse_mode=parse_mode)
@@ -35,7 +33,6 @@ def send_to_all(text, parse_mode=None):
                 "user is deactivated"
             ]):
                 logging.warning(f"Чат {chat_id} недоступен: {str(e)}")
-                broken_chats.add(chat_id)
             else:
                 logging.error(f"Ошибка в чате {chat_id}: {str(e)}")
 
