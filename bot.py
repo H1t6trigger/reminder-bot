@@ -75,7 +75,7 @@ def send_scheduled_notification(context, time_key):
         message_text = schedules_dict[storage_type][storage_key][time_key]
         #Отправляем только если есть активные чаты
         if chat_id in active_chats:
-            bot.send_message(bot.chat.id, message_text, parse_mode='HTML')
+            send_to_chat(message_text, chat_id, parse_mode='HTML')
         else:
             logging.warning(f"Чат {chat_id} неактивен для отправки уведомления {time_key}")
 
@@ -243,7 +243,6 @@ def show_reminders_list(message):
         result += f"{time} : {event}\n"
     
     bot.send_message(message.chat.id, result, parse_mode='HTML')
-
 #Импорт и настройка планировщика
 setup_scheduler(send_to_chat)
 bot.infinity_polling()
