@@ -27,9 +27,14 @@ def setup_scheduler(send_func):
         logging.error(f"Ошибка при запуске потока шедулера: {str(e)}")
 
 #Удаление задания из планировщика по времени
-def remove_scheduled_job(delete_time):
-    for job in schedule.get_jobs():
-            if job.next_run:
-                job_time = job.next_run.strftime("%H:%M")
-                if job_time == delete_time:
-                    schedule.cancel_job(job)
+def remove_scheduled_job(jobs_dict, chat_id, delete_time):
+    try:
+        if chat_id in jobs_dict and delete_time in jobs_dict[chat_id]:
+            job = jobs_dict[chat_id][delete_time]
+            schedule.cancel_job(job)
+            del jobs_dict[chat_id][delete_time]
+            return True
+        return False
+    except Exception as e:
+        logging.error(f"Ошибка при удалении задачи: {str(e)}")
+        return False
