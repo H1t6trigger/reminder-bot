@@ -5,53 +5,79 @@ import schedule
 from config import TOKEN
 from scheduler import setup_scheduler, remove_scheduled_job
 
-#Настройка бота
 bot = telebot.TeleBot(TOKEN)
 
 active_chats = set()
 user_states = dict()
 
-#События по умолчанию
+#Разделение личных и групповых чатов
 schedules_dict = {
-    "09:30": "Кто опоздал на работу — тот <s>пыська</s> плохой человек!", 
-    "11:55": "Пора идти на обед!", 
-    "16:25": "Пора идти за водой!"
-    }
+    "private": {},
+    "groups": {} 
+}
+jobs_dict = {
+    "private": {},
+    "groups": {} 
+}
 
-#Отправка всем активным чатам с обработкой ошибок
-def send_to_all(text, parse_mode=None):
-    for chat_id in active_chats:
-        try:
-            bot.send_message(chat_id, text, parse_mode=parse_mode)
+#Определяет тип чата и возвращает соответствующий контекст
+def get_chat_context(message):
+    chat_type = message.chat.type
+    chat_id = message.chat.id
+    user_id = message.from_user.id
 
-        except telebot.apihelper.ApiTelegramException as e:
-            error_message = str(e).lower()
-            if any(phrase in error_message for phrase in [
-                "bot was blocked", 
-                "bot was kicked",
-                "chat not found",
-                "user is deactivated"
-            ]):
-                logging.warning(f"Чат {chat_id} недоступен: {str(e)}")
-            else:
-                logging.error(f"Ошибка в чате {chat_id}: {str(e)}")
+    if chat_type == "private":
+        return {
+            "type": "private",
+            "storage_key": user_id,
+            "chat_id": chat_id,
+            "user_id": user_id
+        }
+    else:
+        return {
+            "type": "group",
+            "storage_key": chat_id,
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "group_name": message.chat.title
+        }
+    
+#Возвращает соответствующие словари для данного контекста
+def get_storage_dicts(context):
+    storage_type = "groups" if context["type"] == "group" else "private"
+    return schedules_dict[storage_type], jobs_dict[storage_type]
 
-        except Exception as e:
-            logging.critical(f"Неизвестная ошибка: {str(e)}")
+#Отправка сообщения чату
+def send_to_chat(text, chat_id, parse_mode=None):
+    try:
+        bot.send_message(chat_id, text, parse_mode=parse_mode)
+    except telebot.apihelper.ApiTelegramException as e:
+        error_message = str(e).lower()
+        if any(phrase in error_message for phrase in [
+            "bot was blocked", 
+            "bot was kicked",
+            "chat not found",
+            "user is deactivated"
+        ]):
+            logging.warning(f"Чат {chat_id} недоступен: {str(e)}")
+        else:
+            logging.error(f"Ошибка в чате {chat_id}: {str(e)}")
+
+    except Exception as e:
+        logging.critical(f"Неизвестная ошибка: {str(e)}")
 
 #Отправка уведомления по конкретному времени
-def send_scheduled_notification(time_key):
-    if time_key in schedules_dict:
-        message_text = schedules_dict[time_key]
+def send_scheduled_notification(context, time_key):
+    storage_type = 'groups' if context['type'] == 'group' else 'private'
+    storage_key = context['storage_key']
+    chat_id = context["chat_id"]
+    if storage_key in schedules_dict[storage_type] and time_key in schedules_dict[storage_type][storage_key]:
+        message_text = schedules_dict[storage_type][storage_key][time_key]
         #Отправляем только если есть активные чаты
-        if active_chats:
-            send_to_all(message_text)
+        if chat_id in active_chats:
+            bot.send_message(bot.chat.id, message_text, parse_mode='HTML')
         else:
-            logging.warning(f"Нет активных чатов для отправки уведомления {time_key}")
-
-#Добавляем изначальные события в шедулер
-for time_key in schedules_dict:
-    schedule.every().day.at(time_key).do(send_scheduled_notification, time_key)
+            logging.warning(f"Чат {chat_id} неактивен для отправки уведомления {time_key}")
 
 #Проверяем формат для ввода нового события: HH:MM Текст
 def is_valid_schedule_input(text):
@@ -72,11 +98,33 @@ def is_valid_remove_input(text):
 def start(message):
     try:
         user_id = message.from_user.id
+        chat_id = message.chat.id
         user_states.pop(user_id, None)
 
-        active_chats.add(message.chat.id)
-        bot.send_message(message.chat.id, "Вы подписались на уведомления!")
-        logging.info(f"Пользователь {user_id} подписался на уведомления")
+        context =  get_chat_context(message)
+        s_dict, j_dict = get_storage_dicts(context)
+
+        active_chats.add(chat_id)
+
+        #Добавление событий по умолчанию
+        if context["storage_key"] not in s_dict:
+            s_dict[context["storage_key"]] = {
+                "09:30": "Кто опоздал на работу — тот <s>пыська</s> плохой человек!",
+                "11:55": "Пора идти на обед!",
+                "15:55": "Пора идти за водой!"
+            }
+        if context["storage_key"] not in j_dict:
+            j_dict[context["storage_key"]] = {}
+            for time_key in ["09:30", "11:55", "15:55"]:
+                job = schedule.every().day.at(time_key).do(
+                    send_scheduled_notification, 
+                    context, 
+                    time_key
+                )
+                j_dict[context["storage_key"]][time_key] = job
+
+        bot.send_message(chat_id, "Вы подписались на уведомления!")
+        logging.info(f"Чат {chat_id} подписался на уведомления")
     except Exception as e:
         logging.error(f"Ошибка в команде /start: {str(e)}")
 
@@ -91,7 +139,8 @@ def add_new_reminder(message):
 #Обработка ввода нового события
 def add_new_schedule(message):
         user_id = message.from_user.id
-
+        context = get_chat_context(message)
+        s_dict, j_dict = get_storage_dicts(context)
         #Обработка прерывания командами
         if message.text.startswith('/'):
             user_states.pop(user_id, None)
@@ -103,20 +152,28 @@ def add_new_schedule(message):
                 parts = message.text.split()
                 time = parts[0]
                 text = ' '.join(parts[1:])
-                schedules_dict[time] = text
-                #Создаем задание в планировщике
-                schedule.every().day.at(time).do(send_scheduled_notification, time)
 
-                bot.send_message(message.chat.id, f"Новое событие добавлено: {time} {text}", parse_mode="HTML")
-                logging.info(f"Добавлено новое событие: {time} {text}")
+                #Создание пустого расписания если такое отсутствует
+                if context["storage_key"] not in s_dict:
+                    s_dict[context["storage_key"]] = dict()
+                if context["storage_key"] not in j_dict:
+                    j_dict[context["storage_key"]] = dict()
+
+                s_dict[context["storage_key"]][time] = text
+
+                #Создаем задание в планировщике
+                job = schedule.every().day.at(time).do(send_scheduled_notification, context, time)
+
+                j_dict[context["storage_key"]][time] = job
+                bot.send_message(context["chat_id"], f"Новое событие добавлено: {time} {text}", parse_mode="HTML")
             else:
                 bot.send_message(message.chat.id, "Неправильный формат. Нужно: HH:MM Текст. Введите заново")
                 bot.register_next_step_handler(message, add_new_schedule)
         
         except ValueError as e:
-            bot.send_message(message.chat.id, f"Ошибка времени: {e}")    
+            bot.send_message(context["chat_id"], f"Ошибка времени: {e}")    
         except Exception as e:
-            bot.send_message(message.chat.id, f"Ошибка: {e}")
+            bot.send_message(context["chat_id"], f"Ошибка: {e}")
         finally:
             user_states.pop(user_id, None)
 
@@ -131,6 +188,8 @@ def remove_reminder(message):
 #Обработка удаления события
 def delete_schedule(message):
     user_id = message.from_user.id
+    context = get_chat_context(message)
+    s_dict, j_dict = get_storage_dicts(context)
 
     #Обработка прерывания командами
     if message.text.startswith('/'):
@@ -147,20 +206,23 @@ def delete_schedule(message):
         delete_time = message.text
         
         #Проверяем существование события
-        if delete_time not in schedules_dict:
+        if context['storage_key'] not in s_dict or delete_time not in s_dict[context['storage_key']]:
             bot.send_message(message.chat.id, f"Событие на {delete_time} не найдено.")
             return
         
         #Удаляем из планировщика
-        remove_scheduled_job(delete_time)
+        if remove_scheduled_job(j_dict, context['storage_key'], delete_time):
+            logging.info(f"Удалена задача на {delete_time}")
+        else:
+            logging.warning(f"Задача на {delete_time} не найдена в планировщике")   
         
-        del schedules_dict[delete_time]
+        del s_dict[context['storage_key']][delete_time]
         
         bot.send_message(message.chat.id, f"Событие на {delete_time} удалено")
         logging.info(f"Удалено событие: {delete_time}")
             
     except Exception as e:
-        bot.send_message(message.chat.id, f"Ошибка при у    далении: {e}")
+        bot.send_message(message.chat.id, f"Ошибка при удалении: {e}")
     finally:
         user_states.pop(user_id, None)
 
@@ -168,19 +230,21 @@ def delete_schedule(message):
 @bot.message_handler(commands=['list'])
 def show_reminders_list(message):
     user_id = message.from_user.id
+    context = get_chat_context(message)
+    s_dict, _ = get_storage_dicts(context)
     user_states.pop(user_id, None)
 
-    if not schedules_dict:
+    if context['storage_key'] not in s_dict or not s_dict[context['storage_key']]:
         bot.send_message(message.chat.id, "Список событий пуст")
         return
     
     result = "Ваши напоминания:\n\n"
-    for time, event in sorted(schedules_dict.items()):
+    for time, event in sorted(s_dict[context['storage_key']].items()):
         result += f"{time} : {event}\n"
     
     bot.send_message(message.chat.id, result, parse_mode='HTML')
 
 #Импорт и настройка планировщика
-setup_scheduler(send_to_all)
+setup_scheduler(send_to_chat)
 bot.infinity_polling()
 
