@@ -11,43 +11,9 @@ active_chats = set()
 user_states = dict()
 
 #Разделение личных и групповых чатов
-schedules_dict = {
-    "private": {},
-    "group": {} 
-}
-jobs_dict = {
-    "private": {},
-    "group"
-    "": {} 
-}
-
-#Определяет тип чата и возвращает соответствующий контекст
-def get_chat_context(message):
-    chat_type = message.chat.type
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
-    if chat_type == "private":
-        return {
-            "type": "private",
-            "storage_key": user_id,
-            "chat_id": chat_id,
-            "user_id": user_id
-        }
-    else:
-        return {
-            "type": "group",
-            "storage_key": chat_id,
-            "chat_id": chat_id,
-            "user_id": user_id,
-            "group_name": message.chat.title
-        }
+schedules_dict = dict()
+jobs_dict = dict()
     
-#Возвращает соответствующие словари для данного контекста
-def get_storage_dicts(context):
-    storage_type = "group" if context["type"] == "group" else "private"
-    return schedules_dict[storage_type], jobs_dict[storage_type]
-
 #Отправка сообщения чату
 def send_to_chat(text, chat_id, parse_mode=None):
     try:
@@ -68,12 +34,9 @@ def send_to_chat(text, chat_id, parse_mode=None):
         logging.critical(f"Неизвестная ошибка: {str(e)}")
 
 #Отправка уведомления по конкретному времени
-def send_scheduled_notification(context, time_key):
-    storage_type = 'group' if context['type'] == 'group' else 'private'
-    storage_key = context['storage_key']
-    chat_id = context["chat_id"]
-    if storage_key in schedules_dict[storage_type] and time_key in schedules_dict[storage_type][storage_key]:
-        message_text = schedules_dict[storage_type][storage_key][time_key]
+def send_scheduled_notification(chat_id, time_key):
+    if chat_id in schedules_dict and time_key in schedules_dict[chat_id]:
+        message_text = schedules_dict[chat_id][time_key]
         #Отправляем только если есть активные чаты
         if chat_id in active_chats:
             send_to_chat(message_text, chat_id, parse_mode='HTML')
@@ -98,28 +61,24 @@ def start(message):
         user_id = message.from_user.id
         chat_id = message.chat.id
         user_states.pop(user_id, None)
-
-        context =  get_chat_context(message)
-        s_dict, j_dict = get_storage_dicts(context)
-
         active_chats.add(chat_id)
 
         #Добавление событий по умолчанию
-        if context["storage_key"] not in s_dict:
-            s_dict[context["storage_key"]] = {
+        if chat_id not in schedules_dict:
+            schedules_dict[chat_id] = {
                 "09:30": "Кто опоздал на работу — тот <s>пыська</s> плохой человек!",
                 "11:55": "Пора идти на обед!",
                 "15:55": "Пора идти за водой!"
             }
-        if context["storage_key"] not in j_dict:
-            j_dict[context["storage_key"]] = {}
+        if chat_id not in jobs_dict:
+            jobs_dict[chat_id] = dict()
             for time_key in ["09:30", "11:55", "15:55"]:
                 job = schedule.every().day.at(time_key).do(
                     send_scheduled_notification, 
-                    context, 
+                    chat_id, 
                     time_key
                 )
-                j_dict[context["storage_key"]][time_key] = job
+                jobs_dict[chat_id][time_key] = job
 
         help_text = """
 Бот для создания напоминаний
@@ -148,8 +107,8 @@ def add_new_reminder(message):
 #Обработка ввода нового события
 def add_new_schedule(message):
         user_id = message.from_user.id
-        context = get_chat_context(message)
-        s_dict, j_dict = get_storage_dicts(context)
+        chat_id = message.chat.id
+
         #Обработка прерывания командами
         if message.text.startswith('/'):
             user_states.pop(user_id, None)
@@ -163,27 +122,27 @@ def add_new_schedule(message):
                 text = ' '.join(parts[1:])
 
                 #Создание пустого расписания если такое отсутствует
-                if context["storage_key"] not in s_dict:
-                    s_dict[context["storage_key"]] = dict()
-                if context["storage_key"] not in j_dict:
-                    j_dict[context["storage_key"]] = dict()
+                if chat_id not in schedules_dict:
+                    schedules_dict[chat_id] = dict()
+                if chat_id not in jobs_dict:
+                    jobs_dict[chat_id] = dict()
 
-                s_dict[context["storage_key"]][time] = text
+                schedules_dict[chat_id][time] = text
 
                 #Создаем задание в планировщике
-                job = schedule.every().day.at(time).do(send_scheduled_notification, context, time)
+                job = schedule.every().day.at(time).do(send_scheduled_notification, chat_id, time)
 
-                j_dict[context["storage_key"]][time] = job
-                bot.send_message(context["chat_id"], f"Новое событие добавлено: {time} {text}", parse_mode="HTML")
+                jobs_dict[chat_id][time] = job
+                bot.send_message(chat_id, f"Новое событие добавлено: {time} {text}", parse_mode="HTML")
                 user_states.pop(user_id, None)
             else:
                 bot.send_message(message.chat.id, "Неправильный формат. Нужно: HH:MM Текст. Введите заново")
                 bot.register_next_step_handler(message, add_new_schedule)
         
         except ValueError as e:
-            bot.send_message(context["chat_id"], f"Ошибка времени: {e}")    
+            bot.send_message(chat_id, f"Ошибка времени: {e}")    
         except Exception as e:
-            bot.send_message(context["chat_id"], f"Ошибка: {e}")
+            bot.send_message(chat_id, f"Ошибка: {e}")
 
 #Обработка команды /remove
 @bot.message_handler(commands=['remove'])
@@ -196,8 +155,7 @@ def remove_reminder(message):
 #Обработка удаления события
 def delete_schedule(message):
     user_id = message.from_user.id
-    context = get_chat_context(message)
-    s_dict, j_dict = get_storage_dicts(context)
+    chat_id = message.chat.id
 
     #Обработка прерывания командами
     if message.text.startswith('/'):
@@ -207,54 +165,54 @@ def delete_schedule(message):
     
     try:
         if not is_valid_input(message, message.text):
-            bot.send_message(message.chat.id, "Неправильный формат. Нужно: HH:MM. Введите заново")
+            bot.send_message(chat_id, "Неправильный формат. Нужно: HH:MM. Введите заново")
             bot.register_next_step_handler(message, delete_schedule)
             return
             
         delete_time = message.text
         
         #Проверяем существование события
-        if context['storage_key'] not in s_dict or delete_time not in s_dict[context['storage_key']]:
-            bot.send_message(message.chat.id, f"Событие на {delete_time} не найдено.")
+        if chat_id not in schedules_dict or delete_time not in schedules_dict[chat_id]:
+            bot.send_message(chat_id, f"Событие на {delete_time} не найдено.")
             return
         
         #Удаляем из планировщика
-        if remove_scheduled_job(j_dict, context['storage_key'], delete_time):
-            logging.info(f"Удалена задача на {delete_time}")
+        if remove_scheduled_job(jobs_dict, chat_id, delete_time):
+            logging.info(f"Удалена задача на {delete_time} в чате {chat_id}")
         else:
-            logging.warning(f"Задача на {delete_time} не найдена в планировщике")   
+            logging.warning(f"Задача на {delete_time} не найдена в планировщике для чата {chat_id}")   
         
-        del s_dict[context['storage_key']][delete_time]
+        del schedules_dict[chat_id][delete_time]
         
-        bot.send_message(message.chat.id, f"Событие на {delete_time} удалено")
+        bot.send_message(chat_id, f"Событие на {delete_time} удалено")
         user_states.pop(user_id, None)
         logging.info(f"Удалено событие: {delete_time}")
             
     except Exception as e:
-        bot.send_message(message.chat.id, f"Ошибка при удалении: {e}")
+        bot.send_message(chat_id, f"Ошибка при удалении: {e}")
 
 
 #Обработка команды "Показать все события"
 @bot.message_handler(commands=['list'])
 def show_reminders_list(message):
     user_id = message.from_user.id
-    context = get_chat_context(message)
-    s_dict, _ = get_storage_dicts(context)
+    chat_id = message.chat.id
     user_states.pop(user_id, None)
 
-    if context['storage_key'] not in s_dict or not s_dict[context['storage_key']]:
-        bot.send_message(message.chat.id, "Список событий пуст")
+    if chat_id not in schedules_dict or not schedules_dict[chat_id]:
+        bot.send_message(chat_id, "Список событий пуст")
         return
     
     result = "Ваши напоминания:\n\n"
-    for time, event in sorted(s_dict[context['storage_key']].items()):
+    for time, event in sorted(schedules_dict[chat_id].items()):
         result += f"{time} : {event}\n"
     
-    bot.send_message(message.chat.id, result, parse_mode='HTML')
+    bot.send_message(chat_id, result, parse_mode='HTML')
 
 @bot.message_handler(commands=['help'])
 def show_help(message):
     user_id = message.from_user.id
+    chat_id = message.chat.id
     user_states.pop(user_id, None)
     help_text = """
 Бот для создания напоминаний
@@ -267,7 +225,7 @@ def show_help(message):
 /help - помощь
 """
 
-    bot.send_message(message.chat.id, help_text, parse_mode='HTML')
+    bot.send_message(chat_id, help_text, parse_mode='HTML')
 
 #Импорт и настройка планировщика
 setup_scheduler(send_to_chat)
