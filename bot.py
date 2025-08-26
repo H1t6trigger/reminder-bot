@@ -10,11 +10,9 @@ bot = telebot.TeleBot(TOKEN)
 active_chats = set()
 user_states = dict()
 
-#Разделение личных и групповых чатов
 schedules_dict = dict()
 jobs_dict = dict()
     
-#Отправка сообщения чату
 def send_to_chat(text, chat_id, parse_mode=None):
     try:
         bot.send_message(chat_id, text, parse_mode=parse_mode)
@@ -54,7 +52,6 @@ def is_valid_input(message, text):
         return False
     return True
 
-#Обработчик команды  /start
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
@@ -96,7 +93,6 @@ def start(message):
     except Exception as e:
         logging.error(f"Ошибка в команде /start: {str(e)}")
 
-#Обработка команды /add
 @bot.message_handler(commands=['add'])
 def add_new_reminder(message):
     user_id = message.from_user.id
@@ -144,7 +140,6 @@ def add_new_schedule(message):
         except Exception as e:
             bot.send_message(chat_id, f"Ошибка: {e}")
 
-#Обработка команды /remove
 @bot.message_handler(commands=['remove'])
 def remove_reminder(message):
     user_id = message.from_user.id
@@ -191,8 +186,6 @@ def delete_schedule(message):
     except Exception as e:
         bot.send_message(chat_id, f"Ошибка при удалении: {e}")
 
-
-#Обработка команды "Показать все события"
 @bot.message_handler(commands=['list'])
 def show_reminders_list(message):
     user_id = message.from_user.id
