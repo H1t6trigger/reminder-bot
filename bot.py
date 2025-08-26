@@ -13,11 +13,12 @@ user_states = dict()
 #Разделение личных и групповых чатов
 schedules_dict = {
     "private": {},
-    "groups": {} 
+    "group": {} 
 }
 jobs_dict = {
     "private": {},
-    "groups": {} 
+    "group"
+    "": {} 
 }
 
 #Определяет тип чата и возвращает соответствующий контекст
@@ -44,7 +45,7 @@ def get_chat_context(message):
     
 #Возвращает соответствующие словари для данного контекста
 def get_storage_dicts(context):
-    storage_type = "groups" if context["type"] == "group" else "private"
+    storage_type = "group" if context["type"] == "group" else "private"
     return schedules_dict[storage_type], jobs_dict[storage_type]
 
 #Отправка сообщения чату
@@ -68,7 +69,7 @@ def send_to_chat(text, chat_id, parse_mode=None):
 
 #Отправка уведомления по конкретному времени
 def send_scheduled_notification(context, time_key):
-    storage_type = 'groups' if context['type'] == 'group' else 'private'
+    storage_type = 'group' if context['type'] == 'group' else 'private'
     storage_key = context['storage_key']
     chat_id = context["chat_id"]
     if storage_key in schedules_dict[storage_type] and time_key in schedules_dict[storage_type][storage_key]:
