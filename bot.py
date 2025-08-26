@@ -123,6 +123,17 @@ def start(message):
                 )
                 j_dict[context["storage_key"]][time_key] = job
 
+        help_text = """
+Бот для создания напоминаний
+
+<b>Команды</b>
+/start - подписаться на уведомления
+/add - добавить напоминание
+/remove - удалить напоминание
+/list - показать все действующие напоминания
+/help - помощь
+"""
+        bot.send_message(chat_id, help_text, parse_mode="HTML")
         bot.send_message(chat_id, "Вы подписались на уведомления!")
         logging.info(f"Чат {chat_id} подписался на уведомления")
     except Exception as e:
@@ -243,6 +254,24 @@ def show_reminders_list(message):
         result += f"{time} : {event}\n"
     
     bot.send_message(message.chat.id, result, parse_mode='HTML')
+
+@bot.message_handler(commands=['help'])
+def show_help(message):
+    user_id = message.from_user.id
+    user_states.pop(user_id, None)
+    help_text = """
+Бот для создания напоминаний
+
+<b>Команды</b>
+/start - подписаться на уведомления
+/add - добавить напоминание
+/remove - удалить напоминание
+/list - показать все действующие напоминания
+/help - помощь
+"""
+
+    bot.send_message(message.chat.id, help_text, parse_mode='HTML')
+
 #Импорт и настройка планировщика
 setup_scheduler(send_to_chat)
 bot.infinity_polling()
