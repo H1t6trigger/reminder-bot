@@ -79,16 +79,13 @@ def send_scheduled_notification(context, time_key):
         else:
             logging.warning(f"Чат {chat_id} неактивен для отправки уведомления {time_key}")
 
-#Проверяем формат для ввода нового события: HH:MM Текст
-def is_valid_schedule_input(text):
-    pattern = r'^([0-1][0-9]|2[0-3]):([0-5][0-9])\s+.+$'
-    if not re.match(pattern, text):
-        return False
-    return True
-
-#Проверяем формат ввода для удаления события: HH:MM
-def is_valid_remove_input(text):
-    pattern = r'^([0-1][0-9]|2[0-3]):([0-5][0-9])$'
+def is_valid_input(message, text):
+    user_id = message.from_user.id
+        
+    if user_states[user_id] == "adding_event":
+        pattern = r'^([0-1][0-9]|2[0-3]):([0-5][0-9])\s+.+$'
+    elif user_states[user_id] == "removing_event":
+        pattern = r'^([0-1][0-9]|2[0-3]):([0-5][0-9])$'
     if not re.match(pattern, text):
         return False
     return True
@@ -133,7 +130,7 @@ def start(message):
 /list - показать все действующие напоминания
 /help - помощь
 """
-        bot.send_message(chat_id, help_text, parse_mode="HTML")
+        bot.send_message(chat_id, help_text, parse_mode='HTML')
         bot.send_message(chat_id, "Вы подписались на уведомления!")
         logging.info(f"Чат {chat_id} подписался на уведомления")
     except Exception as e:
@@ -159,7 +156,7 @@ def add_new_schedule(message):
             return
         
         try:
-            if is_valid_schedule_input(message.text):
+            if is_valid_input(message, message.text):
                 parts = message.text.split()
                 time = parts[0]
                 text = ' '.join(parts[1:])
@@ -177,6 +174,7 @@ def add_new_schedule(message):
 
                 j_dict[context["storage_key"]][time] = job
                 bot.send_message(context["chat_id"], f"Новое событие добавлено: {time} {text}", parse_mode="HTML")
+                user_states.pop(user_id, None)
             else:
                 bot.send_message(message.chat.id, "Неправильный формат. Нужно: HH:MM Текст. Введите заново")
                 bot.register_next_step_handler(message, add_new_schedule)
@@ -185,8 +183,6 @@ def add_new_schedule(message):
             bot.send_message(context["chat_id"], f"Ошибка времени: {e}")    
         except Exception as e:
             bot.send_message(context["chat_id"], f"Ошибка: {e}")
-        finally:
-            user_states.pop(user_id, None)
 
 #Обработка команды /remove
 @bot.message_handler(commands=['remove'])
@@ -209,7 +205,7 @@ def delete_schedule(message):
         return
     
     try:
-        if not is_valid_remove_input(message.text):
+        if not is_valid_input(message, message.text):
             bot.send_message(message.chat.id, "Неправильный формат. Нужно: HH:MM. Введите заново")
             bot.register_next_step_handler(message, delete_schedule)
             return
@@ -230,12 +226,12 @@ def delete_schedule(message):
         del s_dict[context['storage_key']][delete_time]
         
         bot.send_message(message.chat.id, f"Событие на {delete_time} удалено")
+        user_states.pop(user_id, None)
         logging.info(f"Удалено событие: {delete_time}")
             
     except Exception as e:
         bot.send_message(message.chat.id, f"Ошибка при удалении: {e}")
-    finally:
-        user_states.pop(user_id, None)
+
 
 #Обработка команды "Показать все события"
 @bot.message_handler(commands=['list'])
