@@ -14,7 +14,7 @@ def run_scheduler():
             time.sleep(5)
 
 #Настройка и запуск планировщика в отдельном потоке
-def setup_scheduler(send_func): 
+def setup_scheduler(): 
     try:
         scheduler_thread = Thread(
             target=run_scheduler,
