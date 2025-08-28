@@ -1,6 +1,6 @@
 import sqlite3
 import logging
-from typing import Dict, Optional
+from typing import Dict
 
 class Database:
     def __init__(self, db_name: str = 'bot_database.db'):
@@ -76,10 +76,10 @@ class Database:
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT 1 FROM events WHERE chat_id = ? AND time = ?",
+                    "SELECT EXISTS(SELECT 1 FROM events WHERE chat_id = ? AND time = ?)",
                     (chat_id, time)
                 )
-                return cursor.fetchone() is not None
+                return bool(cursor.fetchone()[0])
         except Exception as e:
             logging.error(f"Ошибка при проверке события: {str(e)}")
             return False

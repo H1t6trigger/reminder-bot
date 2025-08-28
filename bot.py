@@ -168,7 +168,6 @@ def remove_reminder(message):
 
 #Обработка удаления события
 def delete_schedule(message):
-    user_id = message.from_user.id
     chat_id = message.chat.id
 
     #Обработка прерывания командами
