@@ -76,10 +76,10 @@ class Database:
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT EXISTS(SELECT 1 FROM events WHERE chat_id = ? AND time = ?)",
+                    "SELECT 1 FROM events WHERE chat_id = ? AND time = ?",
                     (chat_id, time)
                 )
-                return bool(cursor.fetchone()[0])
+                return cursor.fetchone() is not None
         except Exception as e:
             logging.error(f"Ошибка при проверке события: {str(e)}")
             return False
