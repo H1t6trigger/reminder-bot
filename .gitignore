@@ -11,6 +11,8 @@ env/
 # Конфиги
 #config.py
 .env
+*.env
+config.py
 
 # Системные
 .DS_Store
