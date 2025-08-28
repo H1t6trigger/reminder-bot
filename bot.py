@@ -34,24 +34,6 @@ def send_scheduled_notification(chat_id, time_key):
         message_text = events.get(time_key, "")
         send_to_chat(message_text, chat_id, parse_mode='HTML')
 
-logging.info("Восстановление заданий планировщика из БД")
-schedule.clear()
-jobs_dict.clear()
-logging.info("Старые задания планировщика очищены")
-all_events = db.get_all_events()  
-for chat_id, events in all_events.items():
-    if chat_id not in jobs_dict:
-        jobs_dict[chat_id] = {}
-    for time_key in events.keys():
-        job = schedule.every().day.at(time_key).do(
-            send_scheduled_notification, 
-            chat_id, 
-            time_key
-        )
-        jobs_dict[chat_id][time_key] = job
-        logging.info(f"Восстановлено задание: chat_id={chat_id}, time={time_key}")
-logging.info("Задания планировщика восстановлены")
-
 def is_valid_input(text, context):
     if context == 'add':
         #Для добавления: HH:MM Текст
@@ -63,6 +45,27 @@ def is_valid_input(text, context):
         return False
         
     return re.match(pattern, text) is not None
+
+def restore_scheduled_jobs():
+    logging.info("Восстановление заданий планировщика из БД")
+    schedule.clear()
+    jobs_dict.clear()
+    logging.info("Старые задания планировщика очищены")
+
+    all_events = db.get_all_events()  
+    for chat_id, events in all_events.items():
+        if chat_id not in jobs_dict:
+            jobs_dict[chat_id] = {}
+        for time_key in events.keys():
+            job = schedule.every().day.at(time_key).do(
+                send_scheduled_notification, 
+                chat_id, 
+                time_key
+            )
+            jobs_dict[chat_id][time_key] = job
+            logging.info(f"Восстановлено задание: chat_id={chat_id}, time={time_key}")
+            
+    logging.info("Задания планировщика восстановлены")
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -234,6 +237,7 @@ def show_help(message):
     bot.send_message(chat_id, help_text, parse_mode='HTML')
 
 #Импорт и настройка планировщика
+restore_scheduled_jobs()
 setup_scheduler()
 bot.infinity_polling()
 
