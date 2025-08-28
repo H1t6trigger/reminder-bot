@@ -52,24 +52,22 @@ for chat_id, events in all_events.items():
         logging.info(f"Восстановлено задание: chat_id={chat_id}, time={time_key}")
 logging.info("Задания планировщика восстановлены")
 
-def is_valid_input(message, text):
-    user_id = message.from_user.id
-    state = db.get_user_state(user_id)
-        
-    if state == "adding_event":
+def is_valid_input(text, context):
+    if context == 'add':
+        #Для добавления: HH:MM Текст
         pattern = r'^([0-1][0-9]|2[0-3]):([0-5][0-9])\s+.+$'
-    elif state == "removing_event":
+    elif context == 'remove':
+        #Для удаления: HH:MM
         pattern = r'^([0-1][0-9]|2[0-3]):([0-5][0-9])$'
-    if not re.match(pattern, text):
+    else:
         return False
-    return True
+        
+    return re.match(pattern, text) is not None
 
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
-        user_id = message.from_user.id
         chat_id = message.chat.id
-        db.remove_user_state(user_id)   
 
         #Добавление событий по умолчанию
         if not db.get_events_by_chat(chat_id):
@@ -121,24 +119,20 @@ def start(message):
 
 @bot.message_handler(commands=['add'])
 def add_new_reminder(message):
-    user_id = message.from_user.id
-    db.set_user_state(user_id, 'adding_event')
     bot.send_message(message.chat.id, "Введите новое событие в формате: HH:MM Текст")
     bot.register_next_step_handler(message, add_new_schedule)
 
 #Обработка ввода нового события
 def add_new_schedule(message):
-        user_id = message.from_user.id
         chat_id = message.chat.id
 
         #Обработка прерывания командами
         if message.text.startswith('/'):
-            db.remove_user_state(user_id)
             bot.process_new_messages([message]) 
             return
         
         try:
-            if is_valid_input(message, message.text):
+            if is_valid_input(message.text, 'add'):
                 parts = message.text.split()
                 time = parts[0]
                 text = ' '.join(parts[1:])
@@ -154,7 +148,6 @@ def add_new_schedule(message):
                 jobs_dict[chat_id][time] = job
 
                 bot.send_message(chat_id, f"Новое событие добавлено: {time} {text}", parse_mode="HTML")
-                db.remove_user_state(user_id)
                 logging.info(f"Добавлено новое событие: chat_id={chat_id}, time={time}")
             else:
                 bot.send_message(message.chat.id, "Неправильный формат. Нужно: HH:MM Текст. Введите заново")
@@ -167,8 +160,6 @@ def add_new_schedule(message):
 
 @bot.message_handler(commands=['remove'])
 def remove_reminder(message):
-    user_id = message.from_user.id
-    db.set_user_state(user_id, "removing_event")
     bot.send_message(message.chat.id, "Введите время события, которое нужно удалить в формате HH:MM")
     bot.register_next_step_handler(message, delete_schedule)
 
@@ -179,12 +170,11 @@ def delete_schedule(message):
 
     #Обработка прерывания командами
     if message.text.startswith('/'):
-        db.remove_user_state(user_id)
         bot.process_new_messages([message])
         return
     
     try:
-        if not is_valid_input(message, message.text):
+        if not is_valid_input(message.text, 'remove'):
             bot.send_message(chat_id, "Неправильный формат. Нужно: HH:MM. Введите заново")
             bot.register_next_step_handler(message, delete_schedule)
             return
@@ -206,7 +196,6 @@ def delete_schedule(message):
             logging.warning(f"Задача на {delete_time} не найдена в планировщике для чата {chat_id}")   
         
         bot.send_message(chat_id, f"Событие на {delete_time} удалено")
-        db.remove_user_state(user_id)
         logging.info(f"Удалено событие: {delete_time}")
             
     except Exception as e:
@@ -214,9 +203,7 @@ def delete_schedule(message):
 
 @bot.message_handler(commands=['list'])
 def show_reminders_list(message):
-    user_id = message.from_user.id
     chat_id = message.chat.id
-    db.remove_user_state(user_id)
 
     events = db.get_events_by_chat(chat_id)
     if not events:
@@ -231,9 +218,7 @@ def show_reminders_list(message):
 
 @bot.message_handler(commands=['help'])
 def show_help(message):
-    user_id = message.from_user.id
     chat_id = message.chat.id
-    db.remove_user_state(user_id)
 
     help_text = """
 Бот для создания напоминаний

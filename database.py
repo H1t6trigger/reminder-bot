@@ -27,17 +27,6 @@ class Database:
                         UNIQUE(chat_id, time)
                     )
                 ''')
-                
-                #Таблица для состояний пользователей
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS user_states (
-                        user_id BIGINT PRIMARY KEY,
-                        state TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                
                 logging.info("База данных инициализирована успешно")
                 
         except Exception as e:
@@ -94,42 +83,6 @@ class Database:
         except Exception as e:
             logging.error(f"Ошибка при проверке события: {str(e)}")
             return False
-    
-    #Методы для работы с состояниями пользователей
-
-    #Установка состояния пользователя
-    def set_user_state(self, user_id: int, state: str):
-        try:
-            with self.get_connection() as conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO user_states (user_id, state, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-                    (user_id, state)
-                )
-        except Exception as e:
-            logging.error(f"Ошибка при установке состояния пользователя: {str(e)}")
-    #Получение состояния пользователя
-    def get_user_state(self, user_id: int) -> Optional[str]:
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT state FROM user_states WHERE user_id = ?",
-                    (user_id,)
-                )
-                row = cursor.fetchone()
-                return row['state'] if row else None
-        except Exception as e:
-            logging.error(f"Ошибка при получении состояния пользователя: {str(e)}")
-            return None
-    #Удаление состояния пользователя
-    def remove_user_state(self, user_id: int):
-        try:
-            with self.get_connection() as conn:
-                conn.execute(
-                    "DELETE FROM user_states WHERE user_id = ?",
-                    (user_id,)
-                )
-        except Exception as e:
-            logging.error(f"Ошибка при удалении состояния пользователя: {str(e)}")
 
     def get_all_events(self) -> Dict[int, Dict[str, str]]:
         try:
