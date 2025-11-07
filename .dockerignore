@@ -1,0 +1,8 @@
+# .dockerignore
+bot_database.db
+data/
+__pycache__/
+*.pyc
+bot.log
+.git
+README.md

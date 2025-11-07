@@ -7,11 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-if not TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set")
 
-TIMEZONES = {"UTC": 0, "MSK": 1, "CHL": 3}
-OFFSET = datetime.timedelta(TIMEZONES['UTC'])
+TIMEZONES = {"UTC": 0, "MSK": 3, "CHL": 5}
+OFFSET = datetime.timedelta(hours=TIMEZONES["CHL"])
 TIMEZONE = datetime.timezone(OFFSET)
 
 logging.basicConfig(
