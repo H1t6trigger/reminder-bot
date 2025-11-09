@@ -4,7 +4,8 @@ import re
 import schedule
 from config import TOKEN
 from database import db, Database
-from scheduler import Scheduler
+from scheduler import Scheduler, DAYS_MAP, REVERSE_DAYS_MAP
+
 
 class ReminderBot:
     def __init__(self, token, db: Database):
@@ -35,12 +36,15 @@ class ReminderBot:
             logging.critical(f"Неизвестная ошибка: {e}")
             
     def send_scheduled_notification(self, chat_id, time_key):
-        """Отправка запланированного уведомления с учётом темы чата"""
         if self.db.event_exists(chat_id, time_key):
             events = self.db.get_events_by_chat(chat_id)
-            message_text = events.get(time_key, "")
+            event = events.get(time_key)
+            if not event:
+                return
+            message_text = event["message"]   # ✅ Берём текст напоминания
             thread_id = self.db.get_chat_thread_id(chat_id)
             self.send_to_chat(message_text, chat_id, parse_mode='HTML', thread_id=thread_id)
+
 
     def is_valid_input(self, text, context):
         if context == 'add':
@@ -110,13 +114,71 @@ class ReminderBot:
 
         if self.is_valid_input(message.text, 'add'):
             time_key, text = message.text.split(maxsplit=1)
-            self.db.add_event(chat_id, time_key, text)
-            self.scheduler.add_job(chat_id, time_key, self.send_scheduled_notification)
-            self.send_to_chat(f"Новое событие добавлено: {time_key} {text}", chat_id, parse_mode="HTML", thread_id=thread_id)
-            logging.info(f"Добавлено событие: chat_id={chat_id}, time={time_key}")
+            self.send_to_chat(
+                "Укажите дни недели (например: понедельник,вторник,четверг или понедельник-пятница или все):", 
+                chat_id, 
+                thread_id=thread_id
+            )
+            self.bot.register_next_step_handler(
+                message,
+                lambda msg: self.ask_days(msg, time_key, text)
+            )
         else:
-            self.send_to_chat("Неправильный формат. Нужно: HH:MM Текст. Введите заново", chat_id, thread_id=thread_id)
+            self.send_to_chat(
+                "Неправильный формат. Нужно: HH:MM Текст. Введите заново",
+                chat_id,
+                thread_id=thread_id
+            )
             self.bot.register_next_step_handler(message, self.add_new_schedule)
+
+    
+    def ask_days(self, message, time_key, text):
+        chat_id = message.chat.id
+        thread_id = self.db.get_chat_thread_id(chat_id)
+
+        raw = message.text.strip().lower()
+
+        if raw == 'все':
+            days_list = None
+            days_display = 'каждый день'
+        elif '-' in raw:
+            start, end = [d.strip() for d in raw.split('-')]
+            try:
+                days_values = list(DAYS_MAP.values())
+                i1, i2 = days_values.index(DAYS_MAP[start]), days_values.index(DAYS_MAP[end])
+                if i1 <= i2:
+                    days_list = days_values[i1:i2+1]
+                else:
+                    days_list = days_values[i1:] + days_values[:i2+1]
+                days_display = ", ".join(REVERSE_DAYS_MAP[d] for d in days_list)
+            except KeyError:
+                self.send_to_chat(
+                    "Некорректный диапазон дней. Попробуйте ещё раз.",
+                    chat_id,
+                    thread_id=thread_id
+                )
+                self.bot.register_next_step_handler(
+                    message,
+                    lambda msg: self.ask_days(msg, time_key, text)
+                )
+                return
+        else:
+            days_list = [DAYS_MAP[d.strip()] for d in raw.split(',') if d.strip() in DAYS_MAP]
+            days_display = ", ".join(REVERSE_DAYS_MAP[d] for d in days_list) if days_list else 'каждый день'
+
+        # Сохраняем событие и создаём задачу
+        self.db.add_event(chat_id, time_key, text, ",".join(days_list) if days_list else None)
+        self.scheduler.add_job(chat_id, time_key, self.send_scheduled_notification, days_list)
+
+        self.send_to_chat(
+            f"Напоминание добавлено: {time_key} {text}\nДни: {days_display}",
+            chat_id,
+            thread_id=thread_id
+        )
+        logging.info(
+            f"Добавлено событие: chat_id={chat_id}, time={time_key}, text={text}, days={days_display}"
+        )
+
         
     def remove_reminder(self, message):
         chat_id = message.chat.id
@@ -143,10 +205,23 @@ class ReminderBot:
             self.send_to_chat(f"Событие на {time_key} не найдено", chat_id, thread_id=thread_id)
             return
 
+        # Получаем дни события для отображения
+        events = self.db.get_events_by_chat(chat_id)
+        event_data = events.get(time_key, {})
+        days = event_data.get('days')
+        if days:
+            days_display = ", ".join(REVERSE_DAYS_MAP[d] for d in days.split(','))
+        else:
+            days_display = 'каждый день'
+
+        # Удаляем из БД и планировщика
         self.db.remove_event(chat_id, time_key)
         self.scheduler.remove_job(chat_id, time_key)
-        self.send_to_chat(f"Событие на {time_key} удалено", chat_id, thread_id=thread_id)
-        logging.info(f"Удалено событие: chat_id={chat_id}, time={time_key}")
+
+        self.send_to_chat(f"Событие на {time_key} удалено ({days_display})", chat_id, thread_id=thread_id)
+        logging.info(f"Удалено событие: chat_id={chat_id}, time={time_key}, days={days_display}")
+
+
         
     def show_reminders_list(self, message):
         chat_id = message.chat.id
@@ -158,8 +233,19 @@ class ReminderBot:
             self.send_to_chat("Список напоминаний пуст", chat_id, thread_id=thread_id)
             return
 
-        text = "Ваши напоминания:\n\n" + "\n".join(f"{t} : {m}" for t, m in sorted(events.items()))
-        self.send_to_chat(text, chat_id, parse_mode='HTML', thread_id=thread_id)
+        lines = []
+        for time_key, data in sorted(events.items()):
+            text = data['message']
+            days = data.get('days')
+            if days:
+                days_display = ", ".join(REVERSE_DAYS_MAP[d] for d in days.split(','))
+            else:
+                days_display = 'каждый день'
+            lines.append(f"{time_key}: {text} - {days_display}")
+
+        self.send_to_chat("Ваши напоминания:\n\n" + "\n".join(lines), chat_id, parse_mode='HTML', thread_id=thread_id)
+
+
         
     def show_help(self, message):
         chat_id = message.chat.id

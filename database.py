@@ -20,36 +20,37 @@ class Database:
         try:
             os.makedirs(os.path.dirname(self.db_name), exist_ok=True)
             with self.get_connection() as conn:
-                # Таблица событий
                 conn.execute('''
                     CREATE TABLE IF NOT EXISTS events (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        chat_id BIGINT NOT NULL,
-                        time TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(chat_id, time)
-                    )
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id BIGINT NOT NULL,
+                    time TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    days TEXT,  -- вот это новое поле
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(chat_id, time)
+                )
                 ''')
 
-                # Таблица настроек чата (включая thread_id)
+                #Таблица настроек чата 
                 conn.execute('''
                     CREATE TABLE IF NOT EXISTS chat_settings (
                         chat_id BIGINT PRIMARY KEY,
                         thread_id INTEGER
                     )
                 ''')
+
                 logging.info("База данных инициализирована успешно")
         except Exception as e:
             logging.error(f"Ошибка при инициализации БД: {str(e)}")
 
-    # === События ===
-    def add_event(self, chat_id: int, time: str, message: str):
+
+    def add_event(self, chat_id: int, time: str, message: str, days: Optional[str] = None):
         try:
             with self.get_connection() as conn:
                 conn.execute(
-                    "INSERT OR REPLACE INTO events (chat_id, time, message) VALUES (?, ?, ?)",
-                    (chat_id, time, message)
+                    "INSERT OR REPLACE INTO events (chat_id, time, message, days) VALUES (?, ?, ?, ?)",
+                    (chat_id, time, message, days)
                 )
         except Exception as e:
             logging.error(f"Ошибка добавления события: {e}")
@@ -64,14 +65,17 @@ class Database:
         except Exception as e:
             logging.error(f"Ошибка удаления события: {e}")
 
-    def get_events_by_chat(self, chat_id: int) -> Dict[str, str]:
+    def get_events_by_chat(self, chat_id: int) -> Dict[str, dict]:
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT time, message FROM events WHERE chat_id = ? ORDER BY time",
+                    "SELECT time, message, days FROM events WHERE chat_id = ? ORDER BY time",
                     (chat_id,)
                 )
-                return {row['time']: row['message'] for row in cursor}
+                return {
+                    row['time']: {"message": row['message'], "days": row['days']}
+                    for row in cursor
+                }
         except Exception as e:
             logging.error(f"Ошибка получения событий для чата {chat_id}: {e}")
             return {}
@@ -88,18 +92,21 @@ class Database:
             logging.error(f"Ошибка проверки события: {e}")
             return False
 
-    def get_all_events(self) -> Dict[int, Dict[str, str]]:
+    def get_all_events(self) -> Dict[int, Dict[str, Dict[str, str]]]:
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT chat_id, time, message FROM events ORDER BY chat_id, time"
+                    "SELECT chat_id, time, message, days FROM events ORDER BY chat_id, time"
                 )
                 result = {}
                 for row in cursor:
                     chat_id = row['chat_id']
                     if chat_id not in result:
                         result[chat_id] = {}
-                    result[chat_id][row['time']] = row['message']
+                    result[chat_id][row['time']] = {
+                        "message": row['message'],
+                        "days": row['days'] if 'days' in row.keys() else None
+                    }
                 return result
         except Exception as e:
             logging.error(f"Ошибка получения всех событий: {e}")
@@ -129,5 +136,4 @@ class Database:
             logging.error(f"Ошибка получения thread_id для чата {chat_id}: {e}")
             return None
 
-# Глобальный экземпляр
 db = Database()
