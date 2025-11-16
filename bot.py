@@ -21,7 +21,6 @@ class ReminderBot:
         self.db = db
         self.scheduler = Scheduler()
         self._register_handlers()
-        self.jobs_dict = {} 
     
     def send_to_chat(self, text, chat_id, parse_mode=None, thread_id=None):
         try:
@@ -241,8 +240,6 @@ class ReminderBot:
         self.send_to_chat(f"Событие на {time_key} удалено ({days_display})", chat_id, thread_id=thread_id)
         logging.info(f"Удалено событие: chat_id={chat_id}, time={time_key}, days={days_display}")
 
-
-        
     def show_reminders_list(self, message):
         chat_id = message.chat.id
         thread_id = message.message_thread_id
@@ -258,14 +255,10 @@ class ReminderBot:
             text = data['message']
             days = data.get('days')
             if days:
-                current_days = days.split(',')
-                if len(current_days) > 1:
-                    days_display = f"{REVERSE_DAYS_MAP[current_days[0]]} - {REVERSE_DAYS_MAP[current_days[len(current_days) - 1]]}"
-                else:
-                    days_display = REVERSE_DAYS_MAP[current_days[0]]
+                days_display = ", ".join(REVERSE_DAYS_MAP[d] for d in days.split(','))
             else:
                 days_display = 'каждый день'
-            lines.append(f"{time_key}: {text} - ({days_display})")
+            lines.append(f"{time_key}: {text}\n({days_display})")
 
         self.send_to_chat("Ваши напоминания:\n\n" + "\n".join(lines), chat_id, parse_mode='HTML', thread_id=thread_id)
 
