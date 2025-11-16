@@ -24,11 +24,8 @@ cd ваш-репозиторий
 pip install -r requirements.txt
 
 Настройте конфигурацию:
-Создайте файл config.py 
-Добавьте ваш Telegram Bot Token
+В .env файле вставьте токен вашего бота
+Измените путь к файлу базы данных при желании
 
 Запустите бота:
-python bot.py
-
-bash
 python bot.py
