@@ -13,7 +13,7 @@ DAYS_MAP = {
     'воскресенье': 'sunday',
 }
 
-#обратный словарь для вывода на русском
+#Обратный словарь для вывода на русском
 REVERSE_DAYS_MAP = {v: k for k, v in DAYS_MAP.items()}
 
 class Scheduler:

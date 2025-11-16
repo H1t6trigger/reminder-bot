@@ -112,7 +112,6 @@ class Database:
             logging.error(f"Ошибка получения всех событий: {e}")
             return {}
 
-    # === Настройки чата (thread_id) ===
     def set_chat_thread_id(self, chat_id: int, thread_id: Optional[int]):
         try:
             with self.get_connection() as conn:
